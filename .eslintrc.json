@@ -1,4 +1,8 @@
 {
+  "ignorePatterns": [
+    "**/test/",
+    "**/dist/"
+  ],
   "parser": "@typescript-eslint/parser",
   "extends": [
     "eslint:recommended",
@@ -9,7 +13,6 @@
     "@typescript-eslint"
   ],
   "rules": {
-    // Add any custom rules here
     "semi": "error",
     "no-console": [
       "error",
