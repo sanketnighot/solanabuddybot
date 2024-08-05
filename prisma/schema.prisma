@@ -22,13 +22,15 @@ model BotState {
 }
 
 model User {
-  id            Int         @id @default(autoincrement())
-  username      String
-  chatId        BigInt      @unique
-  solanaAccount SolanaAcc?
-  subscribedTo  Alert[]     @relation("UserAlerts")
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id                Int             @id @default(autoincrement())
+  username          String
+  chatId            BigInt          @unique
+  solanaAccount     SolanaAcc?
+  subscribedTo      Subscription[]  @relation("UserSubscriptions")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  airdropRequests   AirdropRequest[]
+
 }
 
 model SolanaAcc {
@@ -41,11 +43,18 @@ model SolanaAcc {
   updatedAt   DateTime  @updatedAt
 }
 
-model Alert {
-  id          Int      @id @default(autoincrement())
+model Subscription {
+  id          Int       @id @default(autoincrement())
   name        String
   description String
-  subscribers User[]    @relation("UserAlerts")
+  subscribers User[]    @relation("UserSubscriptions")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model AirdropRequest {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
 }

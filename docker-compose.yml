@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:13
+    container_name: solanabuddybot_postgres_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - solanabuddy_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  solanabuddy_postgres_data:
