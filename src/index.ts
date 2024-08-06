@@ -1,6 +1,6 @@
 import dotenv from "dotenv"
 dotenv.config()
-import TelegramBot from "node-telegram-bot-api"
+import TelegramBot, { ReplyKeyboardMarkup } from "node-telegram-bot-api"
 import ensureUser from "./middleware/auth.middleware"
 import {
   getUserSubscriptions,
@@ -25,10 +25,10 @@ try {
   // Command handler for /start
   bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id
-    const keyboard = {
+    const keyboard: ReplyKeyboardMarkup = {
       keyboard: [
-        ["🏦 My Account", "💳 View Subscriptions"],
-        ["⚙️ Manage Subscriptions"],
+        [{ text: "🏦 My Account" }, { text: "💳 View Subscriptions" }],
+        [{ text: "⚙️ Manage Subscriptions" }],
       ],
       resize_keyboard: true,
       one_time_keyboard: false,
@@ -37,7 +37,6 @@ try {
       chatId,
       "Welcome! I'm your Solana Buddy Telegram bot. How can I help you?",
       {
-        // @ts-ignore
         reply_markup: keyboard,
       }
     )
@@ -48,7 +47,7 @@ try {
     const chatId = msg.chat.id
     bot.sendMessage(
       chatId,
-      "Here are the available commands:\n/start - Start the bot\n/menu - To get avaliable options\n/help - Show this help message"
+      "Here are the available commands:\n/start - Create/Connect to Solana Buddy Bot Account.\n/help - See available commands."
     )
   })
 
@@ -60,14 +59,10 @@ try {
     switch (msg.text) {
       case "🏦 My Account":
         const responseData = await getUserPublicKey(chatId)
+        if (!responseData) return bot.sendMessage(chatId, "No user found")
+        const balance = await getBalance(responseData)
         const keyboard = {
           inline_keyboard: [
-            [
-              {
-                text: "💵 Get Account Balance",
-                callback_data: "account_get_balance",
-              },
-            ],
             [
               {
                 text: "💰 Get Airdrop",
@@ -78,7 +73,7 @@ try {
         }
         bot.sendMessage(
           chatId,
-          `Your Solana Address is \n<code>${responseData}</code> \n \nCheck on <a href="https://solscan.io/account/${responseData}">solscan.io</a>`,
+          `💳 Your Solana Account Address is \n<code>${responseData}</code> \n\n💵 Your Account Balance is \n<code>${balance} $SOL</code> \n\n\nCheck on <a href="https://solscan.io/account/${responseData}">solscan.io</a>`,
           {
             parse_mode: "HTML",
             reply_markup: keyboard,
@@ -137,7 +132,6 @@ try {
     if (action?.startsWith("subscription_")) {
       const [, operation, subscriptionId] = action.split("_")
       try {
-        // @ts-ignore
         const user = await getAccountInfo(chatId)
         if (!user) {
           bot.answerCallbackQuery(callbackQuery.id, {
@@ -146,25 +140,23 @@ try {
           return
         }
         if (operation === "add") {
-          // @ts-ignore
           await addSubscriptionForUser(chatId, subscriptionId)
           bot.answerCallbackQuery(callbackQuery.id, {
             text: "Alert added successfully!",
           })
         } else if (operation === "remove") {
-          // @ts-ignore
           await removeSubscriptionForUser(chatId, subscriptionId)
           bot.answerCallbackQuery(callbackQuery.id, {
             text: "Alert removed successfully!",
           })
         }
+        return
       } catch (error) {
-        console.log("Error managing Subscription", chatId, error)
+        return console.log("Error managing Subscription", chatId, error)
       }
     }
     if (action?.startsWith("account_")) {
       const [, , operation] = action.split("_")
-      // @ts-ignore
       const userPublickey = await getUserPublicKey(chatId)
       if (!userPublickey || userPublickey === null) {
         bot.answerCallbackQuery(callbackQuery.id, {
@@ -172,16 +164,12 @@ try {
         })
         return null
       }
-      if (operation === "balance") {
-        const balance = await getBalance(userPublickey)
-        const message = `Your Solana account balance:\n<b>${balance.toFixed(4)} $SOL</b>\n\nAddress: <code>${userPublickey}</code>`
-        bot.sendMessage(chatId, message, { parse_mode: "HTML" })
-        return
-      } else if (operation === "airdrop") {
+      if (operation === "airdrop") {
         const airdropResponse = await getAirDrop(chatId)
         console.log(airdropResponse)
         bot.sendMessage(chatId, airdropResponse || "Check Wallet for Airdrop")
       }
+      return
     }
   })
 
@@ -191,6 +179,7 @@ try {
   })
 
   console.log("\nBot is running...")
+
   app.listen(PORT, () => {
     console.log(`Solana Buddy Bot Server is running on port ${PORT}`)
   })

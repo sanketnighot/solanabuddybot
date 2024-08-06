@@ -61,8 +61,7 @@ export async function getUserPublicKey(chatId: number): Promise<string | null> {
       include: { solanaAccount: true },
     })
     if (!user) return null
-    // @ts-ignore
-    return user?.solanaAccount?.publicKey
+    return user?.solanaAccount?.publicKey || "No User Info Found"
   } catch (error: any) {
     console.log(`Error Getting User Subscriptions for ${chatId}`, error)
     return null
@@ -77,13 +76,12 @@ export async function getUserSubscriptions(
       where: { chatId: BigInt(chatId) },
       include: { subscribedTo: true },
     })
-    // @ts-ignore
     if (user && user.subscribedTo?.length > 0) {
       const SubscriptionList =
         user.subscribedTo
           ?.map(
-            (subscription: any) =>
-              `<b>Subscription:</b> <i>${subscription.name
+            (subscription: any, index: number) =>
+              `${index + 1}. <b>${subscription.name
                 .replace(/_/g, " ")
                 .split(" ")
                 .map(
@@ -91,7 +89,7 @@ export async function getUserSubscriptions(
                 )
                 .join(
                   " "
-                )}</i>\n<b>Description:</b> <i>${subscription.description}\n</i>`
+                )}</b>\n<b>Description:</b> <i>${subscription.description}\n</i>`
           )
           .join("\n") || ""
       return SubscriptionList
