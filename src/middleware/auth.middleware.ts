@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client"
 import TelegramBot from "node-telegram-bot-api"
 import { createAccountIfNotFound } from "../controllers/accounts.controller"
-import { userType } from "../types/user.types"
+import { userType } from "../types/types"
 
 const prisma = new PrismaClient()
 
