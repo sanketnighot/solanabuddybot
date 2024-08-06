@@ -52,25 +52,6 @@ try {
     )
   })
 
-  // Command handler for /getPublicKey
-  bot.onText(/\/getPublicKey/, async (msg) => {
-    await ensureUser(msg)
-    const chatId = msg.chat.id
-    const responseData = await getUserPublicKey(msg.from!.id)
-    bot.sendMessage(chatId, `Your Solana Address is \n${responseData}`)
-  })
-
-  // Command handler for /getSubscriptions
-  bot.onText(/\/getSubscriptions/, async (msg) => {
-    const chatId = msg.chat.id
-    // @ts-ignore
-    const userSubscriptions: userType = await getUserSubscriptions(msg.from.id)
-    bot.sendMessage(
-      chatId,
-      `Public Key of your account is \n${userSubscriptions}`
-    )
-  })
-
   // Handle responses
   bot.on("message", async (msg) => {
     await ensureUser(msg)

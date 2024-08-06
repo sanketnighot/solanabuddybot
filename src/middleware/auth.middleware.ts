@@ -7,12 +7,9 @@ const prisma = new PrismaClient()
 
 export default async function ensureUser(
   msg: TelegramBot.Message
-): Promise<userType | undefined> {
+): Promise<userType | null> {
   const chatId = msg.chat.id
   const username = msg.from?.username || "unknown"
-  const user: userType | undefined = await createAccountIfNotFound(
-    chatId,
-    username
-  )
+  const user: userType | null = await createAccountIfNotFound(chatId, username)
   return user
 }
