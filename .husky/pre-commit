@@ -1,2 +1,4 @@
 echo "Running Precommit Hook"
+rm -rf dist
+yarn run build
 npx lint-staged
