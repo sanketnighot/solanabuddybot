@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client"
 import { subscriptionType, userType, solanaAccType } from "../types/types"
 import { generateKeypair } from "./wallet.controller"
-import { canRequestAirdrop, requestAirdrop } from "./airdrop.controller"
+import { canRequestAirdrop, requestAirdrop } from "./solana.controller"
 
 const prisma = new PrismaClient()
 
