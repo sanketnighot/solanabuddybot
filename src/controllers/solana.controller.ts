@@ -1,5 +1,10 @@
 import { PrismaClient } from "@prisma/client"
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token"
+import {
+  createMint,
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token"
 import {
   Connection,
   PublicKey,
@@ -10,18 +15,38 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js"
 import bs58 from "bs58"
+import { TokenCreationState } from "../index"
 
 const prisma = new PrismaClient()
+const rpcUrl = process.env.SOLANA_RPC || ""
+
+if (rpcUrl === "") {
+  throw new Error("SOLANA_RPC environment variable is not set")
+}
+
+export async function generateKeypair(): Promise<{
+  publicKey?: string
+  privateKey?: string
+  success: boolean
+  error?: string
+}> {
+  try {
+    const keypair = await Keypair.generate()
+    const publicKey = await keypair.publicKey.toString()
+    const privateKey = await bs58.encode(keypair.secretKey)
+    return { publicKey, privateKey, success: true }
+  } catch (error) {
+    console.log("An Error Occured while generating Keypair: ", error)
+    return { success: false, error: "Error generating Keypair" }
+  }
+}
 
 async function transferSOL(
   fromPrivateKey: string,
   toAddress: string,
   amount: number
 ) {
-  const connection = new Connection(
-    "https://api.devnet.solana.com",
-    "confirmed"
-  )
+  const connection = new Connection(rpcUrl, "confirmed")
   try {
     const fromKeypair = Keypair.fromSecretKey(bs58.decode(fromPrivateKey))
     const toPublicKey = new PublicKey(toAddress)
@@ -76,10 +101,7 @@ export async function requestAirdrop(
   amount: number = 1
 ): Promise<string> {
   try {
-    const connection = new Connection(
-      "https://api.devnet.solana.com",
-      "confirmed"
-    )
+    const connection = new Connection(rpcUrl, "confirmed")
     const publicKeyObj = new PublicKey(publicKey)
 
     const signature = await connection.requestAirdrop(
@@ -97,10 +119,7 @@ export async function requestAirdrop(
 
 export async function getBalance(publicKey: string): Promise<number> {
   try {
-    const connection = new Connection(
-      "https://api.devnet.solana.com",
-      "confirmed"
-    )
+    const connection = new Connection(rpcUrl, "confirmed")
     const publicKeyObj = new PublicKey(publicKey)
     const balance = await connection.getBalance(publicKeyObj)
     return balance / LAMPORTS_PER_SOL // Convert lamports to SOL
@@ -112,10 +131,7 @@ export async function getBalance(publicKey: string): Promise<number> {
 
 export async function getTokenBalance(publicKey: string) {
   try {
-    const connection = new Connection(
-      "https://api.devnet.solana.com",
-      "confirmed"
-    )
+    const connection = new Connection(rpcUrl, "confirmed")
     const pubKey = new PublicKey(publicKey)
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
       pubKey,
@@ -163,5 +179,67 @@ export async function sendSol(
   } catch (error) {
     console.log("Error Sending SOL", chatId, error)
     return null
+  }
+}
+
+export async function createToken(
+  chatId: number,
+  tokenData: TokenCreationState
+) {
+  try {
+    if (!tokenData || tokenData === undefined) return null
+    const user = await prisma.user.findUnique({
+      where: { chatId: BigInt(chatId) },
+      include: { solanaAccount: true },
+    })
+
+    if (!user || !user.solanaAccount) {
+      return null
+    }
+
+    const connection = new Connection(rpcUrl, "confirmed")
+    const fromPrivateKey = bs58.decode(user.solanaAccount.privateKey)
+    const fromKeypair = Keypair.fromSecretKey(fromPrivateKey)
+
+    // Create the token mint
+    const mint = await createMint(
+      connection,
+      fromKeypair,
+      fromKeypair.publicKey,
+      fromKeypair.publicKey,
+      tokenData?.decimals!
+    )
+
+    // Get the token account of the fromWallet address, and if it does not exist, create it
+    const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      fromKeypair,
+      mint,
+      fromKeypair.publicKey
+    )
+
+    // Mint tokens to the from account
+    await mintTo(
+      connection,
+      fromKeypair,
+      mint,
+      fromTokenAccount.address,
+      fromKeypair.publicKey,
+      tokenData.supply! * Math.pow(10, tokenData.decimals!)
+    )
+
+    return {
+      name: tokenData.name,
+      symbol: tokenData.symbol,
+      decimals: tokenData.decimals,
+      supply: tokenData.supply,
+      mintAddress: mint.toBase58(),
+      ownerId: user.id,
+      tokenAccount: fromTokenAccount.address.toBase58(),
+      success: true,
+    }
+  } catch (error: any) {
+    console.log("Error Creating Token", chatId, error)
+    return { success: false, error: error.message || "Error Creating Token" }
   }
 }

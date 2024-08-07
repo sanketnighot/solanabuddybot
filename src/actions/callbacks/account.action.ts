@@ -1,6 +1,9 @@
 import { CallbackQuery } from "node-telegram-bot-api"
-import { bot, userStates } from "../../index"
-import { getTokenBalance } from "../../controllers/solana.controller"
+import { bot, userStates, tokenCreationStates } from "../../index"
+import {
+  createToken,
+  getTokenBalance,
+} from "../../controllers/solana.controller"
 import {
   getAirDrop,
   getUserPublicKey,
@@ -42,33 +45,36 @@ export async function accountsCallback(callbackQuery: CallbackQuery) {
           reply_markup: cancelKeyboard,
         }
       )
-      userState.confirmationMessageId = msgRes.message_id
+      userState!.confirmationMessageId = msgRes.message_id
     }
-    if (operation === "airdrop") {
-      const airdropResponse = await getAirDrop(chatId)
-      bot.sendMessage(chatId, airdropResponse || "Check Wallet for Airdrop", {
-        parse_mode: "HTML",
-      })
-    }
-    if (operation === "tokenBalance") {
-      const pubKey = await getUserPublicKey(chatId)
-      if (!pubKey) return bot.sendMessage(chatId, "No user found")
-      const tokenBalances = await getTokenBalance(pubKey)
-      if (tokenBalances == null)
-        return bot.sendMessage(chatId, "Error Fetching Tokens")
-      if (tokenBalances.balances.length === 0)
-        return bot.sendMessage(chatId, "No Tokens Found")
-      let message = "💰 Your token balances:\n\n"
-      let count = 1
-      for (const token of tokenBalances.balances) {
-        message += `#${count}\n`
-        message += `<b><u>Mint</u></b>: <code>${token.mint}</code>\n`
-        message += `<b><u>Balance</u></b>: <i>${token.balance}</i>\n\n`
-        count++
+    if (reqType === "get") {
+      if (operation === "airdrop") {
+        const airdropResponse = await getAirDrop(chatId)
+        bot.sendMessage(chatId, airdropResponse || "Check Wallet for Airdrop", {
+          parse_mode: "HTML",
+        })
       }
-      bot.sendMessage(chatId, message, { parse_mode: "HTML" })
-      return
+      if (operation === "tokenBalance") {
+        const pubKey = await getUserPublicKey(chatId)
+        if (!pubKey) return bot.sendMessage(chatId, "No user found")
+        const tokenBalances = await getTokenBalance(pubKey)
+        if (tokenBalances == null)
+          return bot.sendMessage(chatId, "Error Fetching Tokens")
+        if (tokenBalances.balances.length === 0)
+          return bot.sendMessage(chatId, "No Tokens Found")
+        let message = "💰 Your token balances:\n\n"
+        let count = 1
+        for (const token of tokenBalances.balances) {
+          message += `#${count}\n`
+          message += `<b><u>Mint</u></b>: <code>${token.mint}</code>\n`
+          message += `<b><u>Balance</u></b>: <i>${token.balance}</i>\n\n`
+          count++
+        }
+        bot.sendMessage(chatId, message, { parse_mode: "HTML" })
+        return
+      }
     }
+
     return
   } catch (error) {
     console.log("subscriptionsCallbackError", error)

@@ -23,3 +23,11 @@ export type solanaAccType = {
   createdAt: Date
   updatedAt: Date
 }
+
+export type tokenCreateData = {
+  stage: string
+  name: string
+  symbol: string
+  decimals: number
+  supply: number
+}

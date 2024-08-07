@@ -1,7 +1,10 @@
 import { PrismaClient } from "@prisma/client"
 import { subscriptionType, userType, solanaAccType } from "../types/types"
-import { generateKeypair } from "./wallet.controller"
-import { canRequestAirdrop, requestAirdrop } from "./solana.controller"
+import {
+  canRequestAirdrop,
+  requestAirdrop,
+  generateKeypair,
+} from "./solana.controller"
 
 const prisma = new PrismaClient()
 
@@ -196,7 +199,6 @@ export async function getSubscribers(
   alert_name: string
 ): Promise<{ chatId: bigint }[] | null> {
   try {
-    // Fetch all users subscribed to this alert
     const subscribedUsers = await prisma.user.findMany({
       where: {
         subscribedTo: {
@@ -226,8 +228,8 @@ export async function getAccountsWithPublicKey(
     })
     const accountsWithPublicKey = solanaAccounts.map(
       ({ user, ...solanaAccFields }) => ({
-        ...user, // Spread the user fields
-        ...solanaAccFields, // Spread the solanaAcc fields
+        ...user,
+        ...solanaAccFields,
       })
     )
     return accountsWithPublicKey
