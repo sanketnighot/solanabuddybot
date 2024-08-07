@@ -9,6 +9,7 @@ import {
   handleMainMenu,
   handleTransferSol,
   handleCreateToken,
+  handleTransferToken,
 } from "./actions/message.action"
 import { subscriptionsCallback } from "./actions/callbacks/subscriptions.action"
 import { accountsCallback } from "./actions/callbacks/account.action"
@@ -21,6 +22,10 @@ import {
   cancelCreateTokenCallback,
   confirmCreateTokenCallback,
 } from "./actions/callbacks/createToken.action"
+import {
+  cancelTransferTokenCallback,
+  confirmTransferTokenCallback,
+} from "./actions/callbacks/transferToken.action"
 const PORT = process.env.API_PORT || 8000
 
 // Create a bot instance
@@ -28,7 +33,7 @@ const token: string = process.env.TELEGRAM_BOT_API_SECRET || ""
 export const bot = new TelegramBot(token, { polling: true })
 
 // Store states
-interface UserState {
+export interface UserState {
   state: string
   recipientAddress?: string
   amount?: number
@@ -42,8 +47,18 @@ export interface TokenCreationState {
   supply?: number
   confirmationMessageId?: number
 }
+
+export interface TokenTransferState {
+  stage: "mint" | "recipient" | "amount" | "confirm"
+  mintAddress?: string
+  recipientAddress?: string
+  amount?: number
+  confirmationMessageId?: number
+}
+
 export const userStates = new Map<number, UserState>()
 export const tokenCreationStates = new Map<number, TokenCreationState>()
+export const tokenTransferStates = new Map<number, TokenTransferState>()
 
 try {
   // Handle responses
@@ -53,6 +68,7 @@ try {
     const chatId = msg.chat.id
     const userState = userStates.get(chatId)
     const tokenCreationState = tokenCreationStates.get(chatId)
+    const tokenTransferState = tokenTransferStates.get(chatId)
 
     bot.sendChatAction(chatId, "typing")
     if (userState) {
@@ -66,6 +82,13 @@ try {
     if (tokenCreationState) {
       try {
         await handleCreateToken(msg)
+      } catch (error) {
+        return console.log("Error Creating Token", chatId, error)
+      }
+    }
+    if (tokenTransferState) {
+      try {
+        await handleTransferToken(msg)
       } catch (error) {
         return console.log("Error Creating Token", chatId, error)
       }
@@ -128,24 +151,24 @@ try {
         return console.log("Error Cancelling Create Token", chatId, error)
       }
     }
-    if (action === "account_create_token") {
-      const cancelKeyboard = {
-        inline_keyboard: [
-          [
-            {
-              text: "❌ Cancel Transaction",
-              callback_data: "cancel_create_token",
-            },
-          ],
-        ],
+
+    if (action === "confirm_transfer_token") {
+      try {
+        const tokenInfo = tokenTransferStates.get(chatId)
+        if (tokenInfo) {
+          await confirmTransferTokenCallback(callbackQuery)
+        } else {
+          bot.sendMessage(chatId, "No Token Info found")
+        }
+      } catch (error) {
+        console.log("Error Creating Token", chatId, error)
       }
-      tokenCreationStates.set(chatId, { stage: "name" })
-      bot.answerCallbackQuery(callbackQuery.id)
-      bot.sendMessage(
-        chatId,
-        "Let's create your token! First, what would you like to name your token?",
-        { reply_markup: cancelKeyboard }
-      )
+    } else if (action === "cancel_transfer_token") {
+      try {
+        await cancelTransferTokenCallback(callbackQuery)
+      } catch (error) {
+        return console.log("Error Cancelling Create Token", chatId, error)
+      }
     }
   })
 

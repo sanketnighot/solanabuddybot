@@ -1,5 +1,10 @@
 import { Message } from "node-telegram-bot-api"
-import { bot, userStates, tokenCreationStates } from "../index"
+import {
+  bot,
+  userStates,
+  tokenCreationStates,
+  tokenTransferStates,
+} from "../index"
 import {
   getSubscriptionsWithUserStatus,
   getUserPublicKey,
@@ -7,6 +12,7 @@ import {
 } from "../controllers/accounts.controller"
 import { getBalance } from "../controllers/solana.controller"
 import { confirmCreateTokenCallback } from "./callbacks/createToken.action"
+import { PublicKey } from "@solana/web3.js"
 
 export async function clearPendingUpdates(msg: Message) {
   try {
@@ -212,22 +218,32 @@ export async function handleMainMenu(msg: Message) {
           inline_keyboard: [
             [
               {
-                text: "💸 Get Airdrop",
-                callback_data: "account_get_airdrop",
-              },
-              {
-                text: "💰 Get Token Balance",
-                callback_data: "account_get_tokenBalance",
-              },
-            ],
-            [
-              {
                 text: "📤 Send $SOL",
                 callback_data: "account_send_sol",
               },
               {
+                text: "💸 Get Airdrop",
+                callback_data: "account_get_airdrop",
+              },
+            ],
+            [
+              {
                 text: "🪙 Create Token",
                 callback_data: "account_create_token",
+              },
+              {
+                text: "💰 Token Balance",
+                callback_data: "account_get_tokenBalance",
+              },
+              {
+                text: "📤 Send Token",
+                callback_data: "account_send_token",
+              },
+            ],
+            [
+              {
+                text: "🎮 Play Mini Games",
+                callback_data: "account_play_miniGames",
               },
             ],
           ],
@@ -288,6 +304,109 @@ export async function handleMainMenu(msg: Message) {
           "Here are the available commands:\n/start - Create/Connect to Solana Buddy Bot Account. \n/help - See available commands.",
           { parse_mode: "HTML" }
         )
+    }
+  } catch (error) {
+    console.log("handleTransferSolError", error)
+    bot.sendMessage(msg.chat.id, "Something went wrong")
+    return
+  }
+}
+
+export async function handleTransferToken(msg: Message) {
+  const cancelKeyboard = {
+    inline_keyboard: [
+      [
+        {
+          text: "❌ Cancel Transaction",
+          callback_data: "cancel_transfer_token",
+        },
+      ],
+    ],
+  }
+  try {
+    const chatId = msg.chat.id
+    const transferTokenState = tokenTransferStates.get(chatId)
+    if (!transferTokenState) return
+
+    switch (transferTokenState.stage) {
+      case "mint":
+        try {
+          transferTokenState.mintAddress = new PublicKey(msg.text!).toBase58()
+          transferTokenState.stage = "recipient"
+          bot.sendMessage(
+            chatId,
+            `Great! Now, please enter the recipient's Solana address:`,
+            { reply_markup: cancelKeyboard }
+          )
+        } catch (error) {
+          bot.sendMessage(
+            chatId,
+            "Invalid mint address. Please enter a valid Solana public key.",
+            { reply_markup: cancelKeyboard }
+          )
+          return
+        }
+        break
+
+      case "recipient":
+        try {
+          transferTokenState.recipientAddress = new PublicKey(
+            msg.text!
+          ).toBase58()
+          transferTokenState.stage = "amount"
+          bot.sendMessage(
+            chatId,
+            `Recipient address set. How many tokens would you like to transfer?`,
+            { reply_markup: cancelKeyboard }
+          )
+        } catch (error) {
+          bot.sendMessage(
+            chatId,
+            "Invalid recipient address. Please enter a valid Solana public key.",
+            { reply_markup: cancelKeyboard }
+          )
+          return
+        }
+        break
+
+      case "amount":
+        const amount = parseFloat(msg.text!)
+        if (isNaN(amount) || amount <= 0) {
+          bot.sendMessage(
+            chatId,
+            "Please enter a valid positive number for the amount.",
+            { reply_markup: cancelKeyboard }
+          )
+          return
+        }
+        transferTokenState.amount = amount
+        transferTokenState.stage = "confirm"
+
+        // =
+        const confirmKeyboard = {
+          inline_keyboard: [
+            [
+              {
+                text: "✅ Confirm Transaction",
+                callback_data: "confirm_transfer_token",
+              },
+              {
+                text: "❌ Cancel Transaction",
+                callback_data: "cancel_transfer_token",
+              },
+            ],
+          ],
+        }
+
+        const confirmMessage = await bot.sendMessage(
+          chatId,
+          `Are you sure you want to proceed with this transaction? \n <u>Transaction Type</u>: <b>Send Token</b>\n<u>Token Address</u>: <code>${transferTokenState.mintAddress}</code> \n<u>Amount</u>: <b>${transferTokenState.amount}</b> \n<u>To</u>: <code>${transferTokenState.recipientAddress}</code>`,
+          { parse_mode: "HTML", reply_markup: confirmKeyboard }
+        )
+        transferTokenState.confirmationMessageId = confirmMessage.message_id
+        break
+      case "confirm":
+        break
     }
   } catch (error) {
     console.log("handleTransferSolError", error)

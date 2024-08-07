@@ -1,9 +1,12 @@
 import { PrismaClient } from "@prisma/client"
 import {
   createMint,
+  getAccount,
+  getMint,
   getOrCreateAssociatedTokenAccount,
   mintTo,
   TOKEN_PROGRAM_ID,
+  transfer,
 } from "@solana/spl-token"
 import {
   Connection,
@@ -15,7 +18,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js"
 import bs58 from "bs58"
-import { TokenCreationState } from "../index"
+import { TokenCreationState, TokenTransferState } from "../index"
 
 const prisma = new PrismaClient()
 const rpcUrl = process.env.SOLANA_RPC || ""
@@ -241,5 +244,73 @@ export async function createToken(
   } catch (error: any) {
     console.log("Error Creating Token", chatId, error)
     return { success: false, error: error.message || "Error Creating Token" }
+  }
+}
+
+export async function sendToken(
+  chatId: number,
+  transferInfo: TokenTransferState
+) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { chatId: BigInt(chatId) },
+      include: { solanaAccount: true },
+    })
+
+    if (!user || !user.solanaAccount) {
+      return
+    }
+    if (!transferInfo) return
+
+    const connection = new Connection(rpcUrl, "confirmed")
+    const fromPrivateKey = bs58.decode(user.solanaAccount.privateKey)
+    const fromKeypair = Keypair.fromSecretKey(fromPrivateKey)
+
+    const mintPublicKey = new PublicKey(transferInfo.mintAddress!)
+    const recipientPublicKey = new PublicKey(transferInfo.recipientAddress!)
+
+    // Get the token account of the fromWallet address, and if it does not exist, create it
+    const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      fromKeypair,
+      mintPublicKey,
+      fromKeypair.publicKey
+    )
+
+    // Get the token account of the toWallet address, and if it does not exist, create it
+    const toTokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      fromKeypair,
+      mintPublicKey,
+      recipientPublicKey
+    )
+
+    // Get the token account info to find out the number of decimals
+    const tokenAccountInfo = await getAccount(
+      connection,
+      fromTokenAccount.address
+    )
+    const mintInfo = await getMint(connection, mintPublicKey)
+    const decimals = mintInfo.decimals
+
+    // Perform the transfer
+    const signature = await transfer(
+      connection,
+      fromKeypair,
+      fromTokenAccount.address,
+      toTokenAccount.address,
+      fromKeypair.publicKey,
+      transferInfo.amount! * Math.pow(10, decimals)
+    )
+
+    return {
+      success: true,
+      signature: signature,
+    }
+  } catch (error) {
+    console.log("Error Sending Token", chatId, error)
+    return {
+      success: false,
+    }
   }
 }

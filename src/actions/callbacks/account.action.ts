@@ -1,5 +1,10 @@
 import { CallbackQuery } from "node-telegram-bot-api"
-import { bot, userStates, tokenCreationStates } from "../../index"
+import {
+  bot,
+  userStates,
+  tokenCreationStates,
+  tokenTransferStates,
+} from "../../index"
 import {
   createToken,
   getTokenBalance,
@@ -24,29 +29,51 @@ export async function accountsCallback(callbackQuery: CallbackQuery) {
       })
       return null
     }
+
     if (reqType === "send") {
-      userStates.set(chatId, { state: "AWAITING_RECIPIENT" })
-      userState = userStates.get(chatId)
-      bot.answerCallbackQuery(callbackQuery.id)
-      const cancelKeyboard = {
-        inline_keyboard: [
-          [
-            {
-              text: "❌ Cancel Transaction",
-              callback_data: "cancel_transfer",
-            },
+      if (operation === "sol") {
+        userStates.set(chatId, { state: "AWAITING_RECIPIENT" })
+        userState = userStates.get(chatId)
+        bot.answerCallbackQuery(callbackQuery.id)
+        const cancelKeyboard = {
+          inline_keyboard: [
+            [
+              {
+                text: "❌ Cancel Transaction",
+                callback_data: "cancel_transfer",
+              },
+            ],
           ],
-        ],
-      }
-      const msgRes = await bot.sendMessage(
-        chatId,
-        "Please enter the recipient's Solana address",
-        {
-          reply_markup: cancelKeyboard,
         }
-      )
-      userState!.confirmationMessageId = msgRes.message_id
+        const msgRes = await bot.sendMessage(
+          chatId,
+          "Please enter the recipient's Solana address",
+          {
+            reply_markup: cancelKeyboard,
+          }
+        )
+        userState!.confirmationMessageId = msgRes.message_id
+      } else if (operation === "token") {
+        const cancelKeyboard = {
+          inline_keyboard: [
+            [
+              {
+                text: "❌ Cancel Transaction",
+                callback_data: "cancel_transfer_token",
+              },
+            ],
+          ],
+        }
+        tokenTransferStates.set(chatId, { stage: "mint" })
+        bot.answerCallbackQuery(callbackQuery.id)
+        bot.sendMessage(
+          chatId,
+          "Let's transfer your token! First, please enter the mint address of the token you want to transfer:",
+          { reply_markup: cancelKeyboard }
+        )
+      }
     }
+
     if (reqType === "get") {
       if (operation === "airdrop") {
         const airdropResponse = await getAirDrop(chatId)
@@ -72,6 +99,34 @@ export async function accountsCallback(callbackQuery: CallbackQuery) {
         }
         bot.sendMessage(chatId, message, { parse_mode: "HTML" })
         return
+      }
+    }
+
+    if (reqType === "create") {
+      if (operation === "token") {
+        const cancelKeyboard = {
+          inline_keyboard: [
+            [
+              {
+                text: "❌ Cancel Transaction",
+                callback_data: "cancel_create_token",
+              },
+            ],
+          ],
+        }
+        tokenCreationStates.set(chatId, { stage: "name" })
+        bot.answerCallbackQuery(callbackQuery.id)
+        bot.sendMessage(
+          chatId,
+          "Let's create your token! First, what would you like to name your token?",
+          { reply_markup: cancelKeyboard }
+        )
+      }
+    }
+
+    if (reqType === "play") {
+      if (operation === "miniGames") {
+        bot.sendMessage(chatId, "Play Minigames")
       }
     }
 
