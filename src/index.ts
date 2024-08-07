@@ -10,6 +10,7 @@ import {
   handleTransferSol,
   handleCreateToken,
   handleTransferToken,
+  handlePlayDiceGame,
 } from "./actions/message.action"
 import { subscriptionsCallback } from "./actions/callbacks/subscriptions.action"
 import { accountsCallback } from "./actions/callbacks/account.action"
@@ -56,9 +57,17 @@ export interface TokenTransferState {
   confirmationMessageId?: number
 }
 
+interface DiceGameState {
+  stage: "rules" | "bet" | "guess"
+  bet?: number
+  guess?: number
+  confirmationMessageId?: number
+}
+
 export const userStates = new Map<number, UserState>()
 export const tokenCreationStates = new Map<number, TokenCreationState>()
 export const tokenTransferStates = new Map<number, TokenTransferState>()
+export const diceGameStates = new Map<number, DiceGameState>()
 
 try {
   // Handle responses
@@ -69,6 +78,7 @@ try {
     const userState = userStates.get(chatId)
     const tokenCreationState = tokenCreationStates.get(chatId)
     const tokenTransferState = tokenTransferStates.get(chatId)
+    const diceGameState = diceGameStates.get(chatId)
 
     bot.sendChatAction(chatId, "typing")
     if (userState) {
@@ -91,6 +101,13 @@ try {
         await handleTransferToken(msg)
       } catch (error) {
         return console.log("Error Creating Token", chatId, error)
+      }
+    }
+    if (diceGameState) {
+      try {
+        await handlePlayDiceGame(msg)
+      } catch (error) {
+        return console.log("Error Playing Dice Game", chatId, error)
       }
     }
 
@@ -169,6 +186,47 @@ try {
       } catch (error) {
         return console.log("Error Cancelling Create Token", chatId, error)
       }
+    }
+
+    if (action === "play_dice_game") {
+      diceGameStates.set(chatId, { stage: "rules" })
+      const rulesKeyboard = {
+        inline_keyboard: [
+          [
+            { text: "✅ Confirm", callback_data: "dice_game_confirm" },
+            { text: "❌ Cancel", callback_data: "dice_game_cancel" },
+          ],
+        ],
+      }
+      bot.answerCallbackQuery(callbackQuery.id)
+      bot.sendMessage(
+        chatId,
+        "🎲 Dice Game Rules:\n\n" +
+          "1. You'll bet an amount of SOL.\n" +
+          "2. Guess a number between 1 and 6.\n" +
+          "3. If you guess correctly, you win 2x your bet!\n" +
+          "4. If you guess wrong, you lose your bet.\n\n" +
+          "Ready to play?",
+        { reply_markup: rulesKeyboard }
+      )
+    } else if (action === "dice_game_confirm") {
+      const state = diceGameStates.get(chatId)
+      if (state) {
+        state.stage = "bet"
+        diceGameStates.set(chatId, state)
+        bot.answerCallbackQuery(callbackQuery.id)
+        bot.sendMessage(chatId, "How much SOL do you want to bet?", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "❌ Cancel", callback_data: "dice_game_cancel" }],
+            ],
+          },
+        })
+      }
+    } else if (action === "dice_game_cancel") {
+      diceGameStates.delete(chatId)
+      bot.answerCallbackQuery(callbackQuery.id)
+      bot.sendMessage(chatId, "Game cancelled. Come back anytime!")
     }
   })
 

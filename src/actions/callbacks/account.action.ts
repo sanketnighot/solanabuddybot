@@ -126,7 +126,15 @@ export async function accountsCallback(callbackQuery: CallbackQuery) {
 
     if (reqType === "play") {
       if (operation === "miniGames") {
-        bot.sendMessage(chatId, "Play Minigames")
+        const gameKeyboard = {
+          inline_keyboard: [
+            [{ text: "🎲 Play Dice Game", callback_data: "play_dice_game" }],
+          ],
+        }
+        bot.answerCallbackQuery(callbackQuery.id)
+        bot.sendMessage(chatId, "Choose a game to play:", {
+          reply_markup: gameKeyboard,
+        })
       }
     }
 

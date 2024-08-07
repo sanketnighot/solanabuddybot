@@ -22,6 +22,8 @@ import { TokenCreationState, TokenTransferState } from "../index"
 
 const prisma = new PrismaClient()
 const rpcUrl = process.env.SOLANA_RPC || ""
+const OWNER_ADDRESS = process.env.OWNER_ADDRESS || ""
+const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY || ""
 
 if (rpcUrl === "") {
   throw new Error("SOLANA_RPC environment variable is not set")
@@ -44,25 +46,45 @@ export async function generateKeypair(): Promise<{
   }
 }
 
-async function transferSOL(
-  fromPrivateKey: string,
+export async function transferSOL(
+  fromAddress: string,
   toAddress: string,
   amount: number
 ) {
   const connection = new Connection(rpcUrl, "confirmed")
   try {
-    const fromKeypair = Keypair.fromSecretKey(bs58.decode(fromPrivateKey))
+    let fromKeypair: Keypair
+    if (fromAddress === process.env.OWNER_ADDRESS) {
+      // Assuming OWNER_PRIVATE_KEY is stored as a base58 encoded string
+      const privateKey = bs58.decode(process.env.OWNER_PRIVATE_KEY)
+      fromKeypair = Keypair.fromSecretKey(privateKey)
+    } else {
+      const user = await prisma.user.findUnique({
+        where: { chatId: BigInt(fromAddress) },
+        include: { solanaAccount: true },
+      })
+      if (!user || !user.solanaAccount) {
+        throw new Error("User not found or has no Solana account")
+      }
+      // Assuming the private key in the database is stored as a base58 encoded string
+      const privateKey = bs58.decode(user.solanaAccount.privateKey)
+      fromKeypair = Keypair.fromSecretKey(privateKey)
+    }
+
     const toPublicKey = new PublicKey(toAddress)
+
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: fromKeypair.publicKey,
         toPubkey: toPublicKey,
-        lamports: BigInt(amount * 1000000000), // Convert SOL to lamports
+        lamports: Math.round(amount * 1000000000), // Convert SOL to lamports, ensuring it's an integer
       })
     )
-    const signature = await sendAndConfirmTransaction(connection, transaction, [
+    const signature = await connection.sendTransaction(transaction, [
       fromKeypair,
     ])
+    await connection.confirmTransaction(signature)
+
     return {
       success: true,
       signature: signature,
@@ -163,7 +185,7 @@ export async function getTokenBalance(publicKey: string) {
 
 export async function sendSol(
   chatId: number,
-  publicKey: string,
+  toPublicKey: string,
   amount: number
 ) {
   try {
@@ -176,8 +198,8 @@ export async function sendSol(
       return null
     }
 
-    const fromPrivateKey = user.solanaAccount.privateKey
-    const result = await transferSOL(fromPrivateKey, publicKey, amount)
+    const fromPublicKey = user.solanaAccount.publicKey
+    const result = await transferSOL(fromPublicKey, toPublicKey, amount)
     return result
   } catch (error) {
     console.log("Error Sending SOL", chatId, error)
