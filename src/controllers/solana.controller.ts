@@ -54,20 +54,20 @@ export async function transferSOL(
   const connection = new Connection(rpcUrl, "confirmed")
   try {
     let fromKeypair: Keypair
-    if (fromAddress === process.env.OWNER_ADDRESS) {
+    let privateKey
+    if (fromAddress === OWNER_ADDRESS) {
       // Assuming OWNER_PRIVATE_KEY is stored as a base58 encoded string
-      const privateKey = bs58.decode(process.env.OWNER_PRIVATE_KEY)
+      privateKey = bs58.decode(OWNER_PRIVATE_KEY)
       fromKeypair = Keypair.fromSecretKey(privateKey)
     } else {
-      const user = await prisma.user.findUnique({
-        where: { chatId: BigInt(fromAddress) },
-        include: { solanaAccount: true },
+      const user = await prisma.solanaAcc.findFirst({
+        where: { publicKey: fromAddress.toString() },
       })
-      if (!user || !user.solanaAccount) {
+      if (!user) {
         throw new Error("User not found or has no Solana account")
       }
       // Assuming the private key in the database is stored as a base58 encoded string
-      const privateKey = bs58.decode(user.solanaAccount.privateKey)
+      const privateKey = bs58.decode(user.privateKey)
       fromKeypair = Keypair.fromSecretKey(privateKey)
     }
 
@@ -98,29 +98,6 @@ export async function transferSOL(
   }
 }
 
-export async function canRequestAirdrop(userId: number): Promise<boolean> {
-  const lastAirdrop = await prisma.airdropRequest.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  })
-
-  if (!lastAirdrop) {
-    return true
-  }
-
-  const now = new Date()
-  const timeSinceLastAirdrop = now.getTime() - lastAirdrop.createdAt.getTime()
-  const oneHourInMs = 60 * 60 * 1000
-
-  return timeSinceLastAirdrop >= oneHourInMs
-}
-
-export async function recordAirdropRequest(userId: number): Promise<void> {
-  await prisma.airdropRequest.create({
-    data: { userId },
-  })
-}
-
 export async function requestAirdrop(
   publicKey: string,
   amount: number = 1
@@ -138,7 +115,7 @@ export async function requestAirdrop(
     return `💸 Airdrop of <b>${amount} $SOL</b> to <code>${publicKey}</code> successful!`
   } catch (error) {
     console.error("Airdrop error:", error)
-    return "Airdrop Failed"
+    return "❌ Airdrop Failed. \n\nProbably due to rate limiting. \nTry again after some time"
   }
 }
 

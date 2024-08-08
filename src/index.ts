@@ -27,6 +27,7 @@ import {
   cancelTransferTokenCallback,
   confirmTransferTokenCallback,
 } from "./actions/callbacks/transferToken.action"
+import { playDiceGame } from "./actions/callbacks/diceGame.action"
 const PORT = process.env.API_PORT || 8000
 
 // Create a bot instance
@@ -57,10 +58,10 @@ export interface TokenTransferState {
   confirmationMessageId?: number
 }
 
-interface DiceGameState {
+export interface DiceGameState {
   stage: "rules" | "bet" | "guess"
   bet?: number
-  guess?: number
+  guess?: string
   confirmationMessageId?: number
 }
 
@@ -203,9 +204,10 @@ try {
         chatId,
         "🎲 Dice Game Rules:\n\n" +
           "1. You'll bet an amount of SOL.\n" +
-          "2. Guess a number between 1 and 6.\n" +
-          "3. If you guess correctly, you win 2x your bet!\n" +
-          "4. If you guess wrong, you lose your bet.\n\n" +
+          "2. Choose a number (1-6) or Even/Odd.\n" +
+          "3. If you guess the exact number, you win 2x your bet!\n" +
+          "4. If you guess Even/Odd correctly, you win 1.5x your bet!\n" +
+          "5. If you guess wrong, you lose your bet.\n\n" +
           "Ready to play?",
         { reply_markup: rulesKeyboard }
       )
@@ -227,6 +229,17 @@ try {
       diceGameStates.delete(chatId)
       bot.answerCallbackQuery(callbackQuery.id)
       bot.sendMessage(chatId, "Game cancelled. Come back anytime!")
+    } else if (action!.startsWith("dice_guess_")) {
+      const state = diceGameStates.get(chatId)
+      if (!state) {
+        bot.answerCallbackQuery(callbackQuery.id)
+        return bot.sendMessage(chatId, "This game is over. Start New Game")
+      }
+      if (state && state.stage === "guess") {
+        state.guess = action!.split("_")[2]
+        bot.answerCallbackQuery(callbackQuery.id)
+        await playDiceGame(chatId, state)
+      }
     }
   })
 
@@ -250,7 +263,6 @@ try {
 
   bot.onText(/\/test/, async (msg) => {
     const chatId = msg.chat.id
-    // const dice = await bot.sendDice(chatId)
   })
 
   // Error handling

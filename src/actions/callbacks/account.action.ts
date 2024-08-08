@@ -129,6 +129,7 @@ export async function accountsCallback(callbackQuery: CallbackQuery) {
         const gameKeyboard = {
           inline_keyboard: [
             [{ text: "🎲 Play Dice Game", callback_data: "play_dice_game" }],
+            [{ text: "❌ Cancel", callback_data: "dice_game_cancel" }],
           ],
         }
         bot.answerCallbackQuery(callbackQuery.id)

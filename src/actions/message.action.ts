@@ -11,11 +11,7 @@ import {
   getUserPublicKey,
   getUserSubscriptions,
 } from "../controllers/accounts.controller"
-import {
-  getBalance,
-  sendSol,
-  transferSOL,
-} from "../controllers/solana.controller"
+import { getBalance } from "../controllers/solana.controller"
 import { confirmCreateTokenCallback } from "./callbacks/createToken.action"
 import { PublicKey } from "@solana/web3.js"
 
@@ -328,84 +324,43 @@ export async function handlePlayDiceGame(msg: Message) {
         if (isNaN(bet) || bet <= 0 || bet >= 10) {
           bot.sendMessage(
             chatId,
-            "Please enter a $SOL amount more than 0 and less than 10."
+            "Please enter a $SOL amount more than 0 and less than 10.",
+            {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "❌ End Game", callback_data: "dice_game_cancel" }],
+                ],
+              },
+            }
           )
           return
         }
         state.bet = bet
         state.stage = "guess"
-        bot.sendMessage(chatId, "Great! Now guess a number between 1 and 6.")
-        break
-
-      case "guess":
-        const guess = parseInt(msg.text!)
-        if (isNaN(guess) || guess < 1 || guess > 6) {
-          bot.sendMessage(chatId, "Please enter a number between 1 and 6.")
-          return
+        state.confirmationMessageId = msg.chat.id
+        const guessKeyboard = {
+          inline_keyboard: [
+            [
+              { text: "1", callback_data: "dice_guess_1" },
+              { text: "2", callback_data: "dice_guess_2" },
+              { text: "3", callback_data: "dice_guess_3" },
+            ],
+            [
+              { text: "4", callback_data: "dice_guess_4" },
+              { text: "5", callback_data: "dice_guess_5" },
+              { text: "6", callback_data: "dice_guess_6" },
+            ],
+            [
+              { text: "Even", callback_data: "dice_guess_even" },
+              { text: "Odd", callback_data: "dice_guess_odd" },
+            ],
+            [{ text: "❌ End Game", callback_data: "dice_game_cancel" }],
+          ],
         }
-        state.guess = guess
-
-        // Roll the dice
-        const diceResult = await bot.sendDice(chatId, { emoji: "🎲" })
-        const diceValue = diceResult.dice!.value
-
-        setTimeout(async () => {
-          if (diceValue === state.guess) {
-            const gameKeyboard = {
-              inline_keyboard: [
-                [
-                  {
-                    text: "🎲 Roll Again",
-                    callback_data: "play_dice_game",
-                  },
-                ],
-              ],
-            }
-            // User wins
-            // Here you would implement the logic to transfer the winnings to the user
-            const OWNER_ADDRESS = process.env.OWNER_ADDRESS || ""
-            const userPublickey = await getUserPublicKey(chatId)
-            if (!userPublickey) return
-            const response = await transferSOL(
-              OWNER_ADDRESS,
-              userPublickey,
-              state.bet! * 2
-            )
-            bot.sendMessage(
-              chatId,
-              `Congratulations! You guessed correctly. You win ${state.bet! * 2} $SOL! \n\n <a href='https://solscan.io/tx/${response.signature}?cluster=devnet'>Check Tranasction Here</a>`,
-              { reply_markup: gameKeyboard, parse_mode: "HTML" }
-            )
-          } else {
-            const gameKeyboard = {
-              inline_keyboard: [
-                [
-                  {
-                    text: "🎲 Roll Again",
-                    callback_data: "play_dice_game",
-                  },
-                ],
-              ],
-            }
-            // User loses
-            // Here you would implement the logic to transfer the bet to the owner
-            const OWNER_ADDRESS = process.env.OWNER_ADDRESS || ""
-            const userPublickey = await getUserPublicKey(chatId)
-            if (!userPublickey) return
-            const response = await transferSOL(
-              userPublickey,
-              OWNER_ADDRESS,
-              state.bet!
-            )
-            bot.sendMessage(
-              chatId,
-              `Sorry, you guessed wrong. You lose ${state.bet} $SOL. \n\n<a href='https://solscan.io/tx/${response.signature}?cluster=devnet'>Check Tranasction Here</a>`,
-              { reply_markup: gameKeyboard, parse_mode: "HTML" }
-            )
-          }
-          diceGameStates.delete(chatId)
-        }, 3000) // Wait for 3 seconds to show the result after the dice animation
-
+        bot.sendMessage(chatId, "Great! Now choose your guess:", {
+          reply_markup: guessKeyboard,
+        })
+        diceGameStates.set(chatId, state)
         break
     }
   } catch (error) {
@@ -427,12 +382,24 @@ export async function handleMainMenu(msg: Message) {
           inline_keyboard: [
             [
               {
+                text: "📂 Open Solscan",
+                web_app: {
+                  url: `https://solscan.io/account/${responseData}?cluster=devnet`,
+                },
+              },
+              {
                 text: "📤 Send $SOL",
                 callback_data: "account_send_sol",
               },
+            ],
+            [
               {
                 text: "💸 Get Airdrop",
                 callback_data: "account_get_airdrop",
+              },
+              {
+                text: "📤 Send Token",
+                callback_data: "account_send_token",
               },
             ],
             [
@@ -443,10 +410,6 @@ export async function handleMainMenu(msg: Message) {
               {
                 text: "💰 Token Balance",
                 callback_data: "account_get_tokenBalance",
-              },
-              {
-                text: "📤 Send Token",
-                callback_data: "account_send_token",
               },
             ],
             [
@@ -459,7 +422,7 @@ export async function handleMainMenu(msg: Message) {
         }
         bot.sendMessage(
           chatId,
-          `💳 Your Solana Account Address is \n<code>${responseData}</code> \n\n💵 Your Account Balance is \n<code>${balance} $SOL</code> \n\n\nCheck on <a href="https://solscan.io/account/${responseData}">solscan.io</a>`,
+          `💳 Your Solana Account Address is \n<code>${responseData}</code> \n\n💵 Your Account Balance is \n<code>${balance} $SOL</code>`,
           {
             parse_mode: "HTML",
             reply_markup: keyboard,

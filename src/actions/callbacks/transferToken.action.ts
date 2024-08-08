@@ -1,6 +1,6 @@
 import { bot, tokenTransferStates } from "../../index"
 import { CallbackQuery } from "node-telegram-bot-api"
-import { sendSol, sendToken } from "../../controllers/solana.controller"
+import { sendToken } from "../../controllers/solana.controller"
 const deleteConfirmationMessage = async (
   chatId: number,
   message_id: number
@@ -30,8 +30,22 @@ export async function confirmTransferTokenCallback(
     if (response?.success) {
       bot.sendMessage(
         chatId,
-        `<b><u>✅ Transfer Successful</u></b> \n\n<u>Transaction Type</u>: <b>Send Token</b>\n<u>Token Address</u>: <code>${transferTokenState.mintAddress}</code> \n<u>Amount</u>: <b>${transferTokenState.amount}</b> \n<u>To</u>: <code>${transferTokenState.recipientAddress}</code>\n\n\n<a href='https://solscan.io/tx/${response.signature}?cluster=devnet'>Check Tranasction Here</a>`,
-        { parse_mode: "HTML" }
+        `<b><u>✅ Transfer Successful</u></b> \n\n<u>Transaction Type</u>: <b>Send Token</b>\n<u>Token Address</u>: <code>${transferTokenState.mintAddress}</code> \n<u>Amount</u>: <b>${transferTokenState.amount}</b> \n<u>To</u>: <code>${transferTokenState.recipientAddress}</code>`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "🔗 Check Transaction",
+                  web_app: {
+                    url: `https://solscan.io/tx/${response.signature}?cluster=devnet`,
+                  },
+                },
+              ],
+            ],
+          },
+        }
       )
     } else {
       bot.sendMessage(
