@@ -250,7 +250,6 @@ try {
 
   bot.onText(/\/test/, async (msg) => {
     const chatId = msg.chat.id
-    // const dice = await bot.sendDice(chatId)
   })
 
   // Error handling

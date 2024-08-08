@@ -138,7 +138,7 @@ export async function requestAirdrop(
     return `💸 Airdrop of <b>${amount} $SOL</b> to <code>${publicKey}</code> successful!`
   } catch (error) {
     console.error("Airdrop error:", error)
-    return "Airdrop Failed"
+    return "❌ Airdrop Failed. \n\nProbably due to rate limiting. \nTry again after some time"
   }
 }
 

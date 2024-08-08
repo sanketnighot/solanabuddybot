@@ -32,8 +32,22 @@ export async function confirmTransferCallback(callbackQuery: CallbackQuery) {
     if (response?.success) {
       bot.sendMessage(
         chatId,
-        `<b><u>✅ Transfer Successful</u></b> \n\n<b>Transaction Type</b>: Send SOL\n<b>Amount</b>: ${userState!.amount} $SOL \n<b>To</b>: <code>${userState!.recipientAddress}</code>\n\n\n<a href='https://solscan.io/tx/${response.signature}?cluster=devnet'>Check Tranasction Here</a>`,
-        { parse_mode: "HTML" }
+        `<b><u>✅ Transfer Successful</u></b> \n\n<b>Transaction Type</b>: Send SOL\n<b>Amount</b>: ${userState!.amount} $SOL \n<b>To</b>: <code>${userState!.recipientAddress}</code>`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "🔗 Check Transaction",
+                  web_app: {
+                    url: `https://solscan.io/tx/${response.signature}?cluster=devnet`,
+                  },
+                },
+              ],
+            ],
+          },
+        }
       )
     } else {
       bot.sendMessage(

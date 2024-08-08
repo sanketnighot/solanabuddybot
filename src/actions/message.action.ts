@@ -351,16 +351,6 @@ export async function handlePlayDiceGame(msg: Message) {
 
         setTimeout(async () => {
           if (diceValue === state.guess) {
-            const gameKeyboard = {
-              inline_keyboard: [
-                [
-                  {
-                    text: "🎲 Roll Again",
-                    callback_data: "play_dice_game",
-                  },
-                ],
-              ],
-            }
             // User wins
             // Here you would implement the logic to transfer the winnings to the user
             const OWNER_ADDRESS = process.env.OWNER_ADDRESS || ""
@@ -371,14 +361,16 @@ export async function handlePlayDiceGame(msg: Message) {
               userPublickey,
               state.bet! * 2
             )
-            bot.sendMessage(
-              chatId,
-              `Congratulations! You guessed correctly. You win ${state.bet! * 2} $SOL! \n\n <a href='https://solscan.io/tx/${response.signature}?cluster=devnet'>Check Tranasction Here</a>`,
-              { reply_markup: gameKeyboard, parse_mode: "HTML" }
-            )
-          } else {
             const gameKeyboard = {
               inline_keyboard: [
+                [
+                  {
+                    text: "🔗 Check Transaction",
+                    web_app: {
+                      url: `https://solscan.io/tx/${response.signature}?cluster=devnet`,
+                    },
+                  },
+                ],
                 [
                   {
                     text: "🎲 Roll Again",
@@ -387,6 +379,12 @@ export async function handlePlayDiceGame(msg: Message) {
                 ],
               ],
             }
+            bot.sendMessage(
+              chatId,
+              `Congratulations! You guessed correctly. You win ${state.bet! * 2} $SOL!`,
+              { reply_markup: gameKeyboard, parse_mode: "HTML" }
+            )
+          } else {
             // User loses
             // Here you would implement the logic to transfer the bet to the owner
             const OWNER_ADDRESS = process.env.OWNER_ADDRESS || ""
@@ -397,9 +395,27 @@ export async function handlePlayDiceGame(msg: Message) {
               OWNER_ADDRESS,
               state.bet!
             )
+            const gameKeyboard = {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🔗 Check Transaction",
+                    web_app: {
+                      url: `https://solscan.io/tx/${response.signature}?cluster=devnet`,
+                    },
+                  },
+                ],
+                [
+                  {
+                    text: "🎲 Roll Again",
+                    callback_data: "play_dice_game",
+                  },
+                ],
+              ],
+            }
             bot.sendMessage(
               chatId,
-              `Sorry, you guessed wrong. You lose ${state.bet} $SOL. \n\n<a href='https://solscan.io/tx/${response.signature}?cluster=devnet'>Check Tranasction Here</a>`,
+              `Sorry, you guessed wrong. You lose ${state.bet} $SOL.`,
               { reply_markup: gameKeyboard, parse_mode: "HTML" }
             )
           }
@@ -426,6 +442,12 @@ export async function handleMainMenu(msg: Message) {
         const keyboard = {
           inline_keyboard: [
             [
+              {
+                text: "📂 Open Solscan",
+                web_app: {
+                  url: `https://solscan.io/account/${responseData}?cluster=devnet`,
+                },
+              },
               {
                 text: "📤 Send $SOL",
                 callback_data: "account_send_sol",
@@ -459,7 +481,7 @@ export async function handleMainMenu(msg: Message) {
         }
         bot.sendMessage(
           chatId,
-          `💳 Your Solana Account Address is \n<code>${responseData}</code> \n\n💵 Your Account Balance is \n<code>${balance} $SOL</code> \n\n\nCheck on <a href="https://solscan.io/account/${responseData}">solscan.io</a>`,
+          `💳 Your Solana Account Address is \n<code>${responseData}</code> \n\n💵 Your Account Balance is \n<code>${balance} $SOL</code>`,
           {
             parse_mode: "HTML",
             reply_markup: keyboard,
