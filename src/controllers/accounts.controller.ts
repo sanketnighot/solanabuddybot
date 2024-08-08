@@ -1,10 +1,6 @@
 import { PrismaClient } from "@prisma/client"
 import { subscriptionType, userType, solanaAccType } from "../types/types"
-import {
-  canRequestAirdrop,
-  requestAirdrop,
-  generateKeypair,
-} from "./solana.controller"
+import { requestAirdrop, generateKeypair } from "./solana.controller"
 
 const prisma = new PrismaClient()
 
@@ -183,9 +179,6 @@ export async function getAirDrop(chatId: number): Promise<string | null> {
       include: { solanaAccount: true },
     })
     if (!user || !user.solanaAccount) return null
-    if (!(await canRequestAirdrop(user.id))) {
-      return "Already claimed"
-    }
     const publicKey = user.solanaAccount.publicKey
     const result = await requestAirdrop(publicKey)
     return result

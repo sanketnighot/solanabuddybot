@@ -98,29 +98,6 @@ export async function transferSOL(
   }
 }
 
-export async function canRequestAirdrop(userId: number): Promise<boolean> {
-  const lastAirdrop = await prisma.airdropRequest.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  })
-
-  if (!lastAirdrop) {
-    return true
-  }
-
-  const now = new Date()
-  const timeSinceLastAirdrop = now.getTime() - lastAirdrop.createdAt.getTime()
-  const oneHourInMs = 60 * 60 * 1000
-
-  return timeSinceLastAirdrop >= oneHourInMs
-}
-
-export async function recordAirdropRequest(userId: number): Promise<void> {
-  await prisma.airdropRequest.create({
-    data: { userId },
-  })
-}
-
 export async function requestAirdrop(
   publicKey: string,
   amount: number = 1
