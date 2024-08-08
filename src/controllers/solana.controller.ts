@@ -54,20 +54,20 @@ export async function transferSOL(
   const connection = new Connection(rpcUrl, "confirmed")
   try {
     let fromKeypair: Keypair
-    if (fromAddress === process.env.OWNER_ADDRESS) {
+    let privateKey
+    if (fromAddress === OWNER_ADDRESS) {
       // Assuming OWNER_PRIVATE_KEY is stored as a base58 encoded string
-      const privateKey = bs58.decode(process.env.OWNER_PRIVATE_KEY)
+      privateKey = bs58.decode(OWNER_PRIVATE_KEY)
       fromKeypair = Keypair.fromSecretKey(privateKey)
     } else {
-      const user = await prisma.user.findUnique({
-        where: { chatId: BigInt(fromAddress) },
-        include: { solanaAccount: true },
+      const user = await prisma.solanaAcc.findFirst({
+        where: { publicKey: fromAddress.toString() },
       })
-      if (!user || !user.solanaAccount) {
+      if (!user) {
         throw new Error("User not found or has no Solana account")
       }
       // Assuming the private key in the database is stored as a base58 encoded string
-      const privateKey = bs58.decode(user.solanaAccount.privateKey)
+      const privateKey = bs58.decode(user.privateKey)
       fromKeypair = Keypair.fromSecretKey(privateKey)
     }
 
