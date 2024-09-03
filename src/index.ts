@@ -1,205 +1,280 @@
 import dotenv from "dotenv"
 dotenv.config()
-import TelegramBot from "node-telegram-bot-api"
+import TelegramBot, { CallbackQuery, Message } from "node-telegram-bot-api"
 import ensureUser from "./middleware/auth.middleware"
+import app from "./app"
+import { onHelp, onStart } from "./actions/command.action"
 import {
-  getUserSubscriptions,
-  getUserPublicKey,
-  getSubscriptionsWithUserStatus,
-  getAccountInfo,
-  addSubscriptionForUser,
-  removeSubscriptionForUser,
-  getAirDrop,
-} from "./controllers/accounts.controller"
-import { userType } from "./types/user.types"
-import { getBalance } from "./controllers/airdrop.controller"
-
-// replace 'YOUR_BOT_TOKEN' with the token you received from BotFather
-const token: string = process.env.TELEGRAM_BOT_API_SECRET || ""
+  clearPendingUpdates,
+  handleMainMenu,
+  handleTransferSol,
+  handleCreateToken,
+  handleTransferToken,
+  handlePlayDiceGame,
+} from "./actions/message.action"
+import { subscriptionsCallback } from "./actions/callbacks/subscriptions.action"
+import { accountsCallback } from "./actions/callbacks/account.action"
+import {
+  cancelTransferCallback,
+  confirmTransferCallback,
+} from "./actions/callbacks/transferSol.action"
+import { createToken } from "./controllers/solana.controller"
+import {
+  cancelCreateTokenCallback,
+  confirmCreateTokenCallback,
+} from "./actions/callbacks/createToken.action"
+import {
+  cancelTransferTokenCallback,
+  confirmTransferTokenCallback,
+} from "./actions/callbacks/transferToken.action"
+import { playDiceGame } from "./actions/callbacks/diceGame.action"
+const PORT = process.env.API_PORT || 8000
 
 // Create a bot instance
-const bot = new TelegramBot(token, { polling: true })
+const token: string = process.env.TELEGRAM_BOT_API_SECRET || ""
+export const bot = new TelegramBot(token, { polling: true })
 
-// Command handler for /start
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id
-  const keyboard = {
-    keyboard: [
-      ["🏦 My Account", "💳 View Subscriptions"],
-      ["⚙️ Manage Subscriptions"],
-    ],
-    resize_keyboard: true,
-    one_time_keyboard: false,
-  }
-  bot.sendMessage(
-    chatId,
-    "Welcome! I'm your Solana Buddy Telegram bot. How can I help you?",
-    {
-      // @ts-ignore
-      reply_markup: keyboard,
+// Store states
+export interface UserState {
+  state: string
+  recipientAddress?: string
+  amount?: number
+  confirmationMessageId?: number
+}
+export interface TokenCreationState {
+  stage: "name" | "symbol" | "decimals" | "supply" | "confirm"
+  name?: string
+  symbol?: string
+  decimals?: number
+  supply?: number
+  confirmationMessageId?: number
+}
+
+export interface TokenTransferState {
+  stage: "mint" | "recipient" | "amount" | "confirm"
+  mintAddress?: string
+  recipientAddress?: string
+  amount?: number
+  confirmationMessageId?: number
+}
+
+export interface DiceGameState {
+  stage: "rules" | "bet" | "guess"
+  bet?: number
+  guess?: string
+  confirmationMessageId?: number
+}
+
+export const userStates = new Map<number, UserState>()
+export const tokenCreationStates = new Map<number, TokenCreationState>()
+export const tokenTransferStates = new Map<number, TokenTransferState>()
+export const diceGameStates = new Map<number, DiceGameState>()
+
+try {
+  // Handle responses
+  bot.on("message", async (msg: Message) => {
+    await clearPendingUpdates(msg)
+    await ensureUser(msg)
+    const chatId = msg.chat.id
+    const userState = userStates.get(chatId)
+    const tokenCreationState = tokenCreationStates.get(chatId)
+    const tokenTransferState = tokenTransferStates.get(chatId)
+    const diceGameState = diceGameStates.get(chatId)
+
+    bot.sendChatAction(chatId, "typing")
+    if (userState) {
+      try {
+        await handleTransferSol(msg)
+      } catch (error) {
+        return console.log("Error Transfering SOL", chatId, error)
+      }
     }
-  )
-})
 
-// Command handler for /help
-bot.onText(/\/help/, async (msg) => {
-  const chatId = msg.chat.id
-  bot.sendMessage(
-    chatId,
-    "Here are the available commands:\n/start - Start the bot\n/menu - To get avaliable options\n/help - Show this help message"
-  )
-})
+    if (tokenCreationState) {
+      try {
+        await handleCreateToken(msg)
+      } catch (error) {
+        return console.log("Error Creating Token", chatId, error)
+      }
+    }
+    if (tokenTransferState) {
+      try {
+        await handleTransferToken(msg)
+      } catch (error) {
+        return console.log("Error Creating Token", chatId, error)
+      }
+    }
+    if (diceGameState) {
+      try {
+        await handlePlayDiceGame(msg)
+      } catch (error) {
+        return console.log("Error Playing Dice Game", chatId, error)
+      }
+    }
 
-// Command handler for /getPublicKey
-bot.onText(/\/getPublicKey/, async (msg) => {
-  await ensureUser(msg)
-  const chatId = msg.chat.id
-  const responseData = await getUserPublicKey(msg.from!.id)
-  bot.sendMessage(chatId, `Your Solana Address is \n${responseData}`)
-})
+    await handleMainMenu(msg)
+  })
 
-// Command handler for /getSubscriptions
-bot.onText(/\/getSubscriptions/, async (msg) => {
-  const chatId = msg.chat.id
-  // @ts-ignore
-  const userSubscriptions: userType = await getUserSubscriptions(msg.from.id)
-  bot.sendMessage(
-    chatId,
-    `Public Key of your account is \n${userSubscriptions}`
-  )
-})
+  // Handle button clicks
+  bot.on("callback_query", async (callbackQuery: CallbackQuery) => {
+    const action = callbackQuery.data
+    const msg = callbackQuery.message
+    const chatId = msg!.chat.id
 
-// Handle responses
-bot.on("message", async (msg) => {
-  await ensureUser(msg)
-  const chatId = msg.chat.id
+    if (action?.startsWith("subscription_")) {
+      try {
+        await subscriptionsCallback(callbackQuery)
+      } catch (error) {
+        return console.log("Error managing Subscription", chatId, error)
+      }
+    }
 
-  switch (msg.text) {
-    case "🏦 My Account":
-      const responseData = await getUserPublicKey(chatId)
-      const keyboard = {
+    if (action?.startsWith("account_")) {
+      try {
+        await accountsCallback(callbackQuery)
+      } catch (error) {
+        return console.log("Error managing Account", chatId, error)
+      }
+    }
+
+    if (action === "confirm_transfer") {
+      try {
+        await confirmTransferCallback(callbackQuery)
+      } catch (error) {
+        return console.log("Error Confirming Transaction", chatId, error)
+      }
+    } else if (action === "cancel_transfer") {
+      try {
+        await cancelTransferCallback(callbackQuery)
+      } catch (error) {
+        return console.log("Error Cancelling Transaction", chatId, error)
+      }
+    }
+
+    if (action === "confirm_create_token") {
+      try {
+        const tokenInfo = tokenCreationStates.get(chatId)
+        if (tokenInfo) {
+          await confirmCreateTokenCallback(callbackQuery)
+        } else {
+          bot.sendMessage(chatId, "No Token Info found")
+        }
+      } catch (error) {
+        console.log("Error Creating Token", chatId, error)
+      }
+    } else if (action === "cancel_create_token") {
+      try {
+        await cancelCreateTokenCallback(callbackQuery)
+      } catch (error) {
+        return console.log("Error Cancelling Create Token", chatId, error)
+      }
+    }
+
+    if (action === "confirm_transfer_token") {
+      try {
+        const tokenInfo = tokenTransferStates.get(chatId)
+        if (tokenInfo) {
+          await confirmTransferTokenCallback(callbackQuery)
+        } else {
+          bot.sendMessage(chatId, "No Token Info found")
+        }
+      } catch (error) {
+        console.log("Error Creating Token", chatId, error)
+      }
+    } else if (action === "cancel_transfer_token") {
+      try {
+        await cancelTransferTokenCallback(callbackQuery)
+      } catch (error) {
+        return console.log("Error Cancelling Create Token", chatId, error)
+      }
+    }
+
+    if (action === "play_dice_game") {
+      diceGameStates.set(chatId, { stage: "rules" })
+      const rulesKeyboard = {
         inline_keyboard: [
           [
-            {
-              text: "💵 Get Account Balance",
-              callback_data: "account_get_balance",
-            },
-          ],
-          [
-            {
-              text: "💰 Get Airdrop",
-              callback_data: "account_get_airdrop",
-            },
+            { text: "✅ Confirm", callback_data: "dice_game_confirm" },
+            { text: "❌ Cancel", callback_data: "dice_game_cancel" },
           ],
         ],
       }
+      bot.answerCallbackQuery(callbackQuery.id)
       bot.sendMessage(
         chatId,
-        `Your Solana Address is \n<code>${responseData}</code> \n \nCheck on <a href="https://solscan.io/account/${responseData}">solscan.io</a>`,
-        {
-          parse_mode: "HTML",
-          reply_markup: keyboard,
-        }
+        "🎲 Dice Game Rules:\n\n" +
+          "1. You'll bet an amount of SOL.\n" +
+          "2. Choose a number (1-6) or Even/Odd.\n" +
+          "3. If you guess the exact number, you win 2x your bet!\n" +
+          "4. If you guess Even/Odd correctly, you win 1.5x your bet!\n" +
+          "5. If you guess wrong, you lose your bet.\n\n" +
+          "Ready to play?",
+        { reply_markup: rulesKeyboard }
       )
-      break
-    case "💳 View Subscriptions":
-      const userSubscriptions = await getUserSubscriptions(chatId)
-      bot.sendMessage(
-        chatId,
-        `<b><u>List of your Subscriptions:</u></b> \n \n${userSubscriptions}`,
-        {
-          parse_mode: "HTML",
-        }
-      )
-      break
-    case "⚙️ Manage Subscriptions":
-      const subscriptions = await getSubscriptionsWithUserStatus(msg.from!.id)
-      for (const subscription of subscriptions) {
-        const keyboard = {
-          inline_keyboard: [
-            [
-              {
-                text: subscription.isSubscribed ? "❌ Remove" : "✅ Add",
-                callback_data: `subscription_${subscription.isSubscribed ? "remove" : "add"}_${subscription.id}`,
-              },
+    } else if (action === "dice_game_confirm") {
+      const state = diceGameStates.get(chatId)
+      if (state) {
+        state.stage = "bet"
+        diceGameStates.set(chatId, state)
+        bot.answerCallbackQuery(callbackQuery.id)
+        bot.sendMessage(chatId, "How much SOL do you want to bet?", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "❌ Cancel", callback_data: "dice_game_cancel" }],
             ],
-          ],
-        }
-
-        await bot.sendMessage(
-          chatId,
-          `Subscription: ${subscription.name
-            .replace(/_/g, " ")
-            .split(" ")
-            .map((word: any) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(
-              " "
-            )}\nDescription: ${subscription.description}\nStatus: ${subscription.isSubscribed ? "Subscribed" : "Not subscribed"}`,
-          { reply_markup: keyboard }
-        )
+          },
+        })
       }
-      break
-  }
-})
+    } else if (action === "dice_game_cancel") {
+      diceGameStates.delete(chatId)
+      bot.answerCallbackQuery(callbackQuery.id)
+      bot.sendMessage(chatId, "Game cancelled. Come back anytime!")
+    } else if (action!.startsWith("dice_guess_")) {
+      const state = diceGameStates.get(chatId)
+      if (!state) {
+        bot.answerCallbackQuery(callbackQuery.id)
+        return bot.sendMessage(chatId, "This game is over. Start New Game")
+      }
+      if (state && state.stage === "guess") {
+        state.guess = action!.split("_")[2]
+        bot.answerCallbackQuery(callbackQuery.id)
+        await playDiceGame(chatId, state)
+      }
+    }
+  })
 
-// Handle button clicks
-bot.on("callback_query", async (callbackQuery) => {
-  const action = callbackQuery.data
-  const msg = callbackQuery.message
-  const chatId = msg!.chat.id
-  if (action?.startsWith("subscription_")) {
-    const [, operation, subscriptionId] = action.split("_")
+  // Command handler for /start
+  bot.onText(/\/start/, async (msg: Message) => {
     try {
-      // @ts-ignore
-      const user = await getAccountInfo(chatId)
-      if (!user) {
-        bot.answerCallbackQuery(callbackQuery.id, {
-          text: "User not found. Please use /start to set up your account.",
-        })
-        return
-      }
-      if (operation === "add") {
-        // @ts-ignore
-        await addSubscriptionForUser(chatId, subscriptionId)
-        bot.answerCallbackQuery(callbackQuery.id, {
-          text: "Alert added successfully!",
-        })
-      } else if (operation === "remove") {
-        // @ts-ignore
-        await removeSubscriptionForUser(chatId, subscriptionId)
-        bot.answerCallbackQuery(callbackQuery.id, {
-          text: "Alert removed successfully!",
-        })
-      }
+      await onStart(msg)
     } catch (error) {
-      console.log("Error managing Subscription", chatId, error)
+      return console.log("Error Starting Bot", msg.chat.id, error)
     }
-  }
-  if (action?.startsWith("account_")) {
-    const [, , operation] = action.split("_")
-    // @ts-ignore
-    const userPublickey = await getUserPublicKey(chatId)
-    if (!userPublickey) {
-      bot.answerCallbackQuery(callbackQuery.id, {
-        text: "User not found. Please use /start to set up your account.",
-      })
-    }
-    if (operation === "balance") {
-      const balance = await getBalance(userPublickey)
-      const message = `Your Solana account balance:\n<b>${balance.toFixed(4)} $SOL</b>\n\nAddress: <code>${userPublickey}</code>`
-      bot.sendMessage(chatId, message, { parse_mode: "HTML" })
-      return
-    } else if (operation === "airdrop") {
-      const airdropResponse = await getAirDrop(chatId)
-      console.log(airdropResponse)
-      bot.sendMessage(chatId, airdropResponse || "Check Wallet for Airdrop")
-    }
-  }
-})
+  })
 
-// Error handling
-bot.on("polling_error", (error) => {
-  console.error(error)
-})
+  // Command handler for /help
+  bot.onText(/\/help/, async (msg: Message) => {
+    try {
+      await onHelp(msg)
+    } catch (error) {
+      return console.log("Error Starting Bot", msg.chat.id, error)
+    }
+  })
 
-console.log("Bot is running...")
+  bot.onText(/\/test/, async (msg) => {
+    const chatId = msg.chat.id
+  })
+
+  // Error handling
+  bot.on("polling_error", (error) => {
+    console.error("Polling Error", error)
+  })
+
+  console.log("\nBot is running...")
+
+  app.listen(PORT, () => {
+    console.log(`Solana Buddy Bot Server is running on port ${PORT}`)
+  })
+} catch (error) {
+  console.log("Error Occured: ", error)
+}

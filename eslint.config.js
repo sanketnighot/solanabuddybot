@@ -1,14 +1,16 @@
-import globals from "globals"
-import pluginJs from "@eslint/js"
+const globals = require("globals")
 
-export default [
+module.exports = [
   { languageOptions: { globals: globals.node } },
-  { files: ["*.js"] },
+  {
+    // Check only *.ts files in the src directory
+    files: ["*.ts"],
+    // Ignore all files in node_modules and dist directories
+    ignores: ["node_modules/**/*.ts", "dist/**/*.ts"],
+  },
   {
     rules: {
-      "no-console": "error",
       quotes: ["error", "double", { allowTemplateLiterals: true }],
     },
   },
-  pluginJs.configs.recommended,
 ]
